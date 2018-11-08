@@ -17,7 +17,7 @@ LINK_DIRECTORIES(${VTE_LIBRARY_DIRS})
 
 ADD_DEFINITIONS(${VTE_CFLAGS_OTHER})
 
-add_executable(LoveTerm src/main.cpp)
+add_executable(LoveTerm src/loveterm.cpp)
 
 TARGET_LINK_LIBRARIES(LoveTerm ${GTK_LIBRARIES})
 TARGET_LINK_LIBRARIES(LoveTerm ${VTE_LIBRARIES})

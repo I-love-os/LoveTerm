@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vte/vte.h>
 #include <gtk/gtk.h>
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 
 using namespace std;
 
@@ -15,6 +17,8 @@ struct Terminal {
 
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event);
 static void term_new(struct Terminal *term);
+static void on_child_exited(VteTerminal *, int status);
+static void delete_current_tab();
 static void setup();
 
 static GtkWidget *window;
@@ -29,7 +33,6 @@ static void term_new(struct Terminal *term) {
     term->terminal = VTE_TERMINAL(term->vte);
     term->shell[0] = vte_get_user_shell();
     GtkWidget *tab_title = gtk_label_new(to_string(term->id + 1).c_str());
-
     GtkWidget *scroll_container = gtk_scrolled_window_new(nullptr, nullptr);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll_container), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), scroll_container, tab_title);
@@ -37,6 +40,12 @@ static void term_new(struct Terminal *term) {
     vte_terminal_set_scroll_on_output(term->terminal, FALSE);
     vte_terminal_set_rewrap_on_resize(term->terminal, TRUE);
     vte_terminal_set_scroll_on_keystroke(term->terminal, TRUE);
+    vte_terminal_set_audible_bell(term->terminal, TRUE);
+    vte_terminal_set_allow_hyperlink(term->terminal, TRUE);
+
+    auto *reg = vte_regex_new_for_match("http[A-Za-z0-9-\\--:]*", -1, PCRE2_MULTILINE | PCRE2_NOTEMPTY, nullptr);
+    auto tag = vte_terminal_match_add_regex (term->terminal, reg, 0);
+    vte_terminal_match_set_cursor_type(term->terminal,tag,GDK_HAND2);
 
     vte_terminal_spawn_async(
             term->terminal,
@@ -54,11 +63,10 @@ static void term_new(struct Terminal *term) {
             nullptr
     );
 
-    g_signal_connect(term->terminal, "child-exited", gtk_main_quit, nullptr);
+    g_signal_connect(term->terminal, "child-exited", G_CALLBACK(on_child_exited), nullptr);
     g_signal_connect(term->terminal, "key-press-event", G_CALLBACK(key_is_pressed), window);
 
     gtk_container_add(GTK_CONTAINER(scroll_container), term->vte);
-
     terms[term->id] = *term;
 }
 
@@ -83,11 +91,15 @@ static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
                  return TRUE;
              }
              case GDK_KEY_X: {
-//                 gtk_notebook_remove_page(GTK_NOTEBOOK(tabs), gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs)));
-//                 id--;
-//                 terms[gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs))] = {0};
-
-                 gtk_widget_show_all(window);
+                 delete_current_tab();
+                 return TRUE;
+             }
+             case GDK_KEY_Left: {
+                 gtk_notebook_prev_page(GTK_NOTEBOOK(tabs));
+                 return TRUE;
+             }
+             case GDK_KEY_Right: {
+                 gtk_notebook_next_page(GTK_NOTEBOOK(tabs));
                  return TRUE;
              }
          }
@@ -95,12 +107,30 @@ static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
     return FALSE;
 }
 
+static void delete_current_tab() {
+    id--;
+
+    gint page;
+    page = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
+    gtk_notebook_remove_page(GTK_NOTEBOOK(tabs),page);
+
+    terms[page] = { NULL };
+}
+
+static void on_child_exited(VteTerminal *, int status) {
+    if (id <= 0) {
+        gtk_main_quit();
+    } else if (status == 0) {
+        delete_current_tab();
+    }
+}
+
 static void setup() {
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     tabs = gtk_notebook_new();
     container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
-    gtk_widget_set_size_request(window, 900, 420);
+    gtk_widget_set_size_request(window, 1000, 510);
 
     gtk_container_add(GTK_CONTAINER(window), container);
     gtk_notebook_set_tab_pos(GTK_NOTEBOOK(tabs), GTK_POS_LEFT);
@@ -119,10 +149,11 @@ int main(int argc, char **argv) {
     setup();
 
     g_signal_connect(window, "delete-event", gtk_main_quit, nullptr);
-
+    //TODO: app gtk
     gtk_widget_show_all(window);
     gtk_main();
 
     delete[] terms;
+
     return 0;
 }
