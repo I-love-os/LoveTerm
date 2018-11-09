@@ -9,33 +9,40 @@ using namespace std;
 const gchar TERM_NAME[9] = "LoveTerm";
 
 struct Terminal {
-    int id;
+    int t_index;
     GtkWidget *vte;
     VteTerminal *terminal;
     char *shell[2];
+    GtkWidget *container;
+};
+
+struct Terms {
+    struct Terminal *t;
+    int size = 0;
 };
 
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event);
 static void term_new(struct Terminal *term);
 static void on_child_exited(VteTerminal *, int status);
 static void delete_current_tab();
+static bool terms_remove(int terms_i);
+static void tabs_update();
 static void setup();
 
 static GtkWidget *window;
 static GtkWidget *tabs;
 static GtkWidget *container;
-static int id = 0;
-static struct Terminal *terms;
+static struct Terms terms;
 
 static void term_new(struct Terminal *term) {
-    term->id = id++;
+    term->t_index = terms.size;
     term->vte = vte_terminal_new();
     term->terminal = VTE_TERMINAL(term->vte);
     term->shell[0] = vte_get_user_shell();
-    GtkWidget *tab_title = gtk_label_new(to_string(term->id + 1).c_str());
-    GtkWidget *scroll_container = gtk_scrolled_window_new(nullptr, nullptr);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll_container), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), scroll_container, tab_title);
+    term->container = gtk_scrolled_window_new(nullptr, nullptr);
+    GtkWidget *tab_title = gtk_label_new(to_string(term->t_index + 1).c_str());
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(term->container), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), term->container, tab_title);
 
     vte_terminal_set_scroll_on_output(term->terminal, FALSE);
     vte_terminal_set_rewrap_on_resize(term->terminal, TRUE);
@@ -44,8 +51,8 @@ static void term_new(struct Terminal *term) {
     vte_terminal_set_allow_hyperlink(term->terminal, TRUE);
 
     auto *reg = vte_regex_new_for_match("http[A-Za-z0-9-\\--:]*", -1, PCRE2_MULTILINE | PCRE2_NOTEMPTY, nullptr);
-    auto tag = vte_terminal_match_add_regex (term->terminal, reg, 0);
-    vte_terminal_match_set_cursor_type(term->terminal,tag,GDK_HAND2);
+    auto tag = vte_terminal_match_add_regex(term->terminal, reg, 0);
+    vte_terminal_match_set_cursor_type(term->terminal, tag, GDK_HAND2);
 
     vte_terminal_spawn_async(
             term->terminal,
@@ -66,8 +73,9 @@ static void term_new(struct Terminal *term) {
     g_signal_connect(term->terminal, "child-exited", G_CALLBACK(on_child_exited), nullptr);
     g_signal_connect(term->terminal, "key-press-event", G_CALLBACK(key_is_pressed), window);
 
-    gtk_container_add(GTK_CONTAINER(scroll_container), term->vte);
-    terms[term->id] = *term;
+    gtk_container_add(GTK_CONTAINER(term->container), term->vte);
+    terms.t[term->t_index] = *term;
+    terms.size++;
 }
 
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
@@ -87,7 +95,7 @@ static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
                  struct Terminal term2 = {0};
                  term_new(&term2);
                  gtk_widget_show_all(window);
-                 gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), id - 1);
+                 gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), terms.size - 1);
                  return TRUE;
              }
              case GDK_KEY_X: {
@@ -108,22 +116,26 @@ static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
 }
 
 static void delete_current_tab() {
-    id--;
-
     gint page;
     page = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
+
+    terms_remove(page);
+
     gtk_notebook_remove_page(GTK_NOTEBOOK(tabs),page);
 
-    terms[page] = { NULL };
+    tabs_update();
 }
 
 static void on_child_exited(VteTerminal *, int status) {
-    if (id <= 0) {
+    if (terms.size <= 0) {
+        gtk_main_quit();
+    } else if (terms.size <= 1 && status == 0) {
         gtk_main_quit();
     } else if (status == 0) {
         delete_current_tab();
     }
 }
+
 
 static void setup() {
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -142,9 +154,35 @@ static void setup() {
     term_new(&term);
 }
 
+static bool terms_remove(int terms_i) {
+    for (int i = 0; i < terms.size; i++) {
+        if (terms.t[i].t_index == terms_i) {
+            for (; i < terms.size - 1; i++) {
+                terms.t[i] = terms.t[i + 1];
+                terms.t[i].t_index = i;
+            }
+
+            terms.t[terms.size - 1] = {0};
+            terms.size--;
+
+            return true;
+        }
+    }
+    return false;
+}
+
+static void tabs_update() {
+    for (int i = 0; i < gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)); i++) {
+        auto page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), i);
+        gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(tabs), page, to_string(i + 1).c_str());
+    }
+    gtk_widget_show_all(window);
+}
+
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
-    terms = new struct Terminal[1000];
+    terms = {nullptr};
+    terms.t = new struct Terminal[1000];
 
     setup();
 
@@ -153,7 +191,7 @@ int main(int argc, char **argv) {
     gtk_widget_show_all(window);
     gtk_main();
 
-    delete[] terms;
+    delete[] terms.t;
 
     return 0;
 }
