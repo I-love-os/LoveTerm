@@ -198,10 +198,8 @@ static void tabs_update() {
 
 static gboolean handle_urls(VteTerminal *vte, GdkEvent *event) {
     if (event->type == GDK_BUTTON_PRESS  &&  event->button.button == 1 && control_pressed) {
-        gint current_tab = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
         string url = vte_terminal_hyperlink_check_event(vte, event);
         g_print(url.c_str());
-//        free(url);
         return TRUE;
     }
 
