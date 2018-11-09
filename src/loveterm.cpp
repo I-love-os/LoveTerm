@@ -3,6 +3,7 @@
 #include <gtk/gtk.h>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
+#include <memory>
 
 using namespace std;
 
@@ -22,17 +23,20 @@ struct Terms {
 };
 
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event);
+static gboolean key_is_released(GtkWidget *widget, GdkEvent *event);
 static void term_new(struct Terminal *term);
 static void on_child_exited(VteTerminal *, int status);
 static void delete_current_tab();
 static bool terms_remove(int terms_i);
 static void tabs_update();
+static gboolean handle_urls(VteTerminal *vte, GdkEvent *event);
 static void setup();
 
 static GtkWidget *window;
 static GtkWidget *tabs;
 static GtkWidget *container;
 static struct Terms terms;
+static bool control_pressed = false;
 
 static void term_new(struct Terminal *term) {
     term->t_index = terms.size;
@@ -72,14 +76,29 @@ static void term_new(struct Terminal *term) {
 
     g_signal_connect(term->terminal, "child-exited", G_CALLBACK(on_child_exited), nullptr);
     g_signal_connect(term->terminal, "key-press-event", G_CALLBACK(key_is_pressed), window);
+    g_signal_connect(term->terminal, "key-release-event", G_CALLBACK(key_is_released), window);
+    g_signal_connect(term->terminal, "button-press-event", G_CALLBACK(handle_urls),  window);
 
     gtk_container_add(GTK_CONTAINER(term->container), term->vte);
     terms.t[term->t_index] = *term;
     terms.size++;
 }
 
+static gboolean key_is_released(GtkWidget *widget, GdkEvent *event) {
+    if (((GdkEventKey *)event)->keyval == GDK_KEY_Control_L) {
+        control_pressed = false;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
      VteTerminal *term = VTE_TERMINAL(widget);
+
+     if (((GdkEventKey *)event)->keyval == GDK_KEY_Control_L) {
+         control_pressed = true;
+     }
 
      if (((GdkEventKey *)event)->state & GDK_CONTROL_MASK) {
          switch (((GdkEventKey *)event)->keyval) {
@@ -120,7 +139,6 @@ static void delete_current_tab() {
     page = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
 
     terms_remove(page);
-
     gtk_notebook_remove_page(GTK_NOTEBOOK(tabs),page);
 
     tabs_update();
@@ -176,7 +194,18 @@ static void tabs_update() {
         auto page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), i);
         gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(tabs), page, to_string(i + 1).c_str());
     }
-    gtk_widget_show_all(window);
+}
+
+static gboolean handle_urls(VteTerminal *vte, GdkEvent *event) {
+    if (event->type == GDK_BUTTON_PRESS  &&  event->button.button == 1 && control_pressed) {
+        gint current_tab = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
+        string url = vte_terminal_hyperlink_check_event(vte, event);
+        g_print(url.c_str());
+//        free(url);
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 int main(int argc, char **argv) {
@@ -189,6 +218,9 @@ int main(int argc, char **argv) {
     g_signal_connect(window, "delete-event", gtk_main_quit, nullptr);
     //TODO: app gtk
     gtk_widget_show_all(window);
+
+    g_print("Terminal is running\n");
+
     gtk_main();
 
     delete[] terms.t;
