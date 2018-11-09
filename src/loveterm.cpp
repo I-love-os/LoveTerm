@@ -15,6 +15,7 @@ struct Terminal {
     VteTerminal *terminal;
     char *shell[2];
     GtkWidget *container;
+    int tag;
 };
 
 struct Terms {
@@ -55,8 +56,8 @@ static void term_new(struct Terminal *term) {
     vte_terminal_set_allow_hyperlink(term->terminal, TRUE);
 
     auto *reg = vte_regex_new_for_match("http[A-Za-z0-9-\\--:]*", -1, PCRE2_MULTILINE | PCRE2_NOTEMPTY, nullptr);
-    auto tag = vte_terminal_match_add_regex(term->terminal, reg, 0);
-    vte_terminal_match_set_cursor_type(term->terminal, tag, GDK_HAND2);
+    term->tag = vte_terminal_match_add_regex(term->terminal, reg, 0);
+    vte_terminal_match_set_cursor_type(term->terminal, term->tag, GDK_HAND2);
 
     vte_terminal_spawn_async(
             term->terminal,
@@ -198,8 +199,17 @@ static void tabs_update() {
 
 static gboolean handle_urls(VteTerminal *vte, GdkEvent *event) {
     if (event->type == GDK_BUTTON_PRESS  &&  event->button.button == 1 && control_pressed) {
-        string url = vte_terminal_hyperlink_check_event(vte, event);
-        g_print(url.c_str());
+        auto url = vte_terminal_hyperlink_check_event(vte, event);
+
+        if (url == NULL) {
+            g_free(url);
+
+            int tab;
+            url = vte_terminal_match_check_event(vte, event, &tab);
+        }
+
+        g_print(url);
+
         return TRUE;
     }
 
