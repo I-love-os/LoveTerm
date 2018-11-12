@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdio.h>
 #include <vte/vte.h>
 #include <gtk/gtk.h>
 #define PCRE2_CODE_UNIT_WIDTH 8
@@ -23,14 +24,19 @@ struct Terms {
     int size = 0;
 };
 
+enum font {Increase, Decrease};
+
 static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event);
 static gboolean key_is_released(GtkWidget *widget, GdkEvent *event);
 static void term_new(struct Terminal *term);
-static void on_child_exited(VteTerminal *, int status);
+static void on_child_exited(VteTerminal *vte, int status);
 static void delete_current_tab();
 static bool terms_remove(int terms_i);
 static void tabs_update();
 static gboolean handle_urls(VteTerminal *vte, GdkEvent *event);
+static gboolean open_url(const char *url);
+static void fontSize(enum font f, VteTerminal *vte);
+
 static void setup();
 
 static GtkWidget *window;
@@ -130,6 +136,14 @@ static gboolean key_is_pressed(GtkWidget *widget, GdkEvent *event) {
                  gtk_notebook_next_page(GTK_NOTEBOOK(tabs));
                  return TRUE;
              }
+             case GDK_KEY_plus: {
+                 fontSize(font::Increase, term);
+                 return TRUE;
+             }
+             case GDK_KEY_minus: {
+                 fontSize(font::Decrease, term);
+                 return TRUE;
+             }
          }
     }
     return FALSE;
@@ -140,12 +154,12 @@ static void delete_current_tab() {
     page = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs));
 
     terms_remove(page);
-    gtk_notebook_remove_page(GTK_NOTEBOOK(tabs),page);
+    gtk_notebook_remove_page(GTK_NOTEBOOK(tabs), page);
 
     tabs_update();
 }
 
-static void on_child_exited(VteTerminal *, int status) {
+static void on_child_exited(VteTerminal *vte, int status) {
     if (terms.size <= 0) {
         gtk_main_quit();
     } else if (terms.size <= 1 && status == 0) {
@@ -155,6 +169,20 @@ static void on_child_exited(VteTerminal *, int status) {
     }
 }
 
+static void fontSize(enum font f, VteTerminal *vte) {
+    gdouble font_scale = vte_terminal_get_font_scale(vte);
+
+    switch (f) {
+        case Increase: {
+            vte_terminal_set_font_scale(vte, font_scale + 0.1);
+            break;
+        }
+        case Decrease: {
+            vte_terminal_set_font_scale(vte, font_scale - 0.1);
+            break;
+        }
+    }
+}
 
 static void setup() {
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -208,12 +236,23 @@ static gboolean handle_urls(VteTerminal *vte, GdkEvent *event) {
             url = vte_terminal_match_check_event(vte, event, &tab);
         }
 
-        g_print(url);
+        g_print(to_string(open_url(url)).c_str());
 
         return TRUE;
     }
 
     return FALSE;
+}
+
+static gboolean open_url(const char *url) {
+    //TODO: fix it (fille:// etc)
+//    GError *error = NULL;
+//    gboolean test = gtk_show_uri_on_window(GTK_WINDOW(window), &url, GDK_CURRENT_TIME, &error);
+    char cmd [10000];
+    string s(url);
+    sprintf(cmd, "xdg-open %s" , url);
+    system(cmd);
+    return TRUE;
 }
 
 int main(int argc, char **argv) {
