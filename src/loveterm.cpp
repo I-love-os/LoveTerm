@@ -42,6 +42,8 @@ static void setup();
 static GtkWidget *window;
 static GtkWidget *tabs;
 static GtkWidget *container;
+static GtkCssProvider *cssProvider;
+static GtkStyleContext *context;
 static struct Terms terms;
 static bool control_pressed = false;
 
@@ -196,6 +198,18 @@ static void setup() {
     gtk_box_pack_start(GTK_BOX(container), tabs, TRUE, TRUE, 0);
     gtk_window_set_title(GTK_WINDOW(window), TERM_NAME);
     gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabs), TRUE);
+//    GtkWidget *testbtn = gtk_button_new();
+//    gtk_box_pack_end(GTK_BOX(container), testbtn, TRUE, TRUE, 0);
+
+    cssProvider = gtk_css_provider_new();
+    context = gtk_widget_get_style_context(GTK_WIDGET(tabs));
+    gtk_css_provider_load_from_path(cssProvider, "css/main.css", nullptr);
+
+    gtk_style_context_add_provider(context,
+                                   GTK_STYLE_PROVIDER(cssProvider),
+                                   GTK_STYLE_PROVIDER_PRIORITY_USER);
+
+    gtk_style_context_save(context);
 
     struct Terminal term = {0};
     term_new(&term);
@@ -262,7 +276,7 @@ int main(int argc, char **argv) {
 
     setup();
 
-    g_signal_connect(window, "delete-event", gtk_main_quit, nullptr);
+    g_signal_connect(window, "destroy", gtk_main_quit, nullptr);
     //TODO: app gtk
     gtk_widget_show_all(window);
 
