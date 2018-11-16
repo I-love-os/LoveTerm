@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <vte/vte.h>
 #include <gtk/gtk.h>
+#include "Logger.h"
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
 #include <memory>
@@ -35,6 +36,7 @@ static bool terms_remove(int terms_i);
 static void tabs_update();
 static gboolean handle_urls(VteTerminal *vte, GdkEvent *event);
 static gboolean open_url(const char *url);
+static void on_app_exit();
 static void fontSize(enum font f, VteTerminal *vte);
 
 static void setup();
@@ -46,6 +48,7 @@ static GtkCssProvider *cssProvider;
 static GtkStyleContext *context;
 static struct Terms terms;
 static bool control_pressed = false;
+static Logger logger;
 
 static void term_new(struct Terminal *term) {
     term->t_index = terms.size;
@@ -91,6 +94,8 @@ static void term_new(struct Terminal *term) {
     gtk_container_add(GTK_CONTAINER(term->container), term->vte);
     terms.t[term->t_index] = *term;
     terms.size++;
+
+    logger.write("Tab(id) has been created");
 }
 
 static gboolean key_is_released(GtkWidget *widget, GdkEvent *event) {
@@ -159,13 +164,15 @@ static void delete_current_tab() {
     gtk_notebook_remove_page(GTK_NOTEBOOK(tabs), page);
 
     tabs_update();
+
+    logger.write("Tab(id) has been closed");
 }
 
 static void on_child_exited(VteTerminal *vte, int status) {
     if (terms.size <= 0) {
-        gtk_main_quit();
+        on_app_exit();
     } else if (terms.size <= 1 && status == 0) {
-        gtk_main_quit();
+        on_app_exit();
     } else if (status == 0) {
         delete_current_tab();
     }
@@ -198,8 +205,6 @@ static void setup() {
     gtk_box_pack_start(GTK_BOX(container), tabs, TRUE, TRUE, 0);
     gtk_window_set_title(GTK_WINDOW(window), TERM_NAME);
     gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabs), TRUE);
-//    GtkWidget *testbtn = gtk_button_new();
-//    gtk_box_pack_end(GTK_BOX(container), testbtn, TRUE, TRUE, 0);
 
     cssProvider = gtk_css_provider_new();
     context = gtk_widget_get_style_context(GTK_WIDGET(tabs));
@@ -269,6 +274,11 @@ static gboolean open_url(const char *url) {
     return TRUE;
 }
 
+static void on_app_exit() {
+    logger.write("Terminal window has been destroyed");
+    gtk_main_quit();
+}
+
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
     terms = {nullptr};
@@ -276,7 +286,9 @@ int main(int argc, char **argv) {
 
     setup();
 
-    g_signal_connect(window, "destroy", gtk_main_quit, nullptr);
+    logger.write("Terminal has been run");
+
+    g_signal_connect(window, "destroy", G_CALLBACK(on_app_exit), nullptr);
     //TODO: app gtk
     gtk_widget_show_all(window);
 

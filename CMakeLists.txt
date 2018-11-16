@@ -19,7 +19,7 @@ ADD_DEFINITIONS(${VTE_CFLAGS_OTHER})
 
 file(COPY src/css DESTINATION ${CMAKE_BINARY_DIR})
 
-add_executable(LoveTerm src/loveterm.cpp)
+add_executable(LoveTerm src/loveterm.cpp src/Logger.cpp src/loveterm.h src/Logger.h)
 
 TARGET_LINK_LIBRARIES(LoveTerm ${GTK_LIBRARIES})
 TARGET_LINK_LIBRARIES(LoveTerm ${VTE_LIBRARIES})
