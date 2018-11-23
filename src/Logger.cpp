@@ -8,19 +8,20 @@
 
 using namespace std;
 
-const string LOG_FILE_PATH = "/home/yknomeh/.termlogs.love";
-
 string get_message(string message) {
     auto time_now = time(nullptr);
     return ctime(&time_now) + message;
 }
 
 bool Logger::write(string message) {
+    char LOG_FILE_PATH [1000];
+    sprintf(LOG_FILE_PATH, "/home/%s/.termlogs.love" , getenv("USER"));
+
     if (message == "") {
         return false;
     }
 
-    ifstream f(LOG_FILE_PATH.c_str());
+    ifstream f(LOG_FILE_PATH);
 
     if (!f.good()) {
         ofstream log_file(LOG_FILE_PATH);

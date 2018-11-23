@@ -267,7 +267,7 @@ static gboolean open_url(const char *url) {
     //TODO: fix it (fille:// etc)
 //    GError *error = NULL;
 //    gboolean test = gtk_show_uri_on_window(GTK_WINDOW(window), &url, GDK_CURRENT_TIME, &error);
-    char cmd [10000];
+    char cmd [1000];
     string s(url);
     sprintf(cmd, "xdg-open %s" , url);
     system(cmd);
